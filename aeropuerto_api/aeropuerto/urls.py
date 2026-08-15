@@ -1,0 +1,18 @@
+from django.urls import path
+from rest_framework.routers import DefaultRouter
+from .views import GateViewSet, FlightViewSet
+from .airlines_views import airlines_list_create, airlines_detail
+from .flight_events_views import flight_events_list_create, flight_events_detail
+
+
+router = DefaultRouter()
+router.register(r"puertas_de_embarque", GateViewSet, basename="puertas_de_embarque")
+router.register(r"vuelos", FlightViewSet, basename="vuelos")
+
+urlpatterns = [
+    path("airlines/", airlines_list_create),
+    path("airlines/<str:id>/", airlines_detail),
+    path("flight_events/", flight_events_list_create),
+    path("flight_events/<str:id>/", flight_events_detail),
+]
+urlpatterns += router.urls

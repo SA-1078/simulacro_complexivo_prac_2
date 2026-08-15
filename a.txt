@@ -1,0 +1,83 @@
+Sistema Básico de Control de
+Vuelos y Operaciones para un Aeropuerto
+
+
+
+
+CASO AEROPUERTO: Sistema Básico de Control de Vuelos y Operaciones para un
+Aeropuerto
+Regla de negocio: gestionar puertas de embarque y vuelos con estados (SCHEDULED, BOARDING, DEPARTED,
+DELAYED, CANCELLED) y registrar operación (aerolíneas y eventos) en NoSQL.
+
+
+
+
+MODELO DE DATOS (2 tablas + 2 colecciones)
+
+Tablas PostgreSQL (2):
+
+Tabla gates (puertas de embarque):
+
+id BIGSERIAL PK
+code VARCHAR(10) NOT NULL UNIQUE
+terminal VARCHAR(20) NOT NULL
+is_available BOOLEAN NOT NULL DEFAULT TRUE
+created_at TIMESTAMP NOT NULL DEFAULT NOW()
+
+
+Tabla flights (vuelos):
+
+id BIGSERIAL PK
+gate_id BIGINT NOT NULL REFERENCES gates(id)
+flight_number VARCHAR(20) NOT NULL (ej: "AA1234")
+destination VARCHAR(100) NOT NULL
+status VARCHAR(20) NOT NULL (SCHEDULED|BOARDING|DEPARTED|DELAYED|CANCELLED)
+departure_time TIMESTAMP NOT NULL
+created_at TIMESTAMP NOT NULL DEFAULT NOW()
+
+
+//////////////////////////////
+SELECT f.status, f.id, g.code, g.is_available
+FROM aeropuerto_flights AS f
+INNER JOIN aeropuerto_gates AS g ON f.id = g.id
+WHERE f.status = 'SCHEDULED';
+
+
+CREATE OR REPLACE VIEW vw_active_orders AS
+SELECT f.status, f.id, g.code, g.is_available
+FROM aeropuerto_flights AS f
+INNER JOIN eropuerto_gates AS g ON f.id = g.id
+WHERE f.status = 'SCHEDULED';
+
+
+
+CREATE OR REPLACE TRIGGER trg_validar_flight_number
+BEFORE INSERT ON flights
+FOR EACH ROW
+EXECUTE FUNCTION fn_validar_flight_number();
+
+Colecciones MongoDB (2):
+
+Colección airlines (aerolíneas registradas):
+_id ObjectId
+name string
+code string (ej: "AA")
+country string
+is_active bool
+created_at date
+
+
+Colección flight_events (eventos operativos):
+_id ObjectId
+flight_id long (id SQL)
+event_type string (CREATED|BOARDING_STARTED|DEPARTED|DELAYED|CANCELLED)
+source string (WEB|MOBILE|SYSTEM)
+note string (texto simple, sin objeto)
+created_at date
+
+
+Nota de integración: flight_events.flight_id debe guardar el id del vuelo creado en PostgreSQL para vincular
+operación con el vuelo.
+
+
+
