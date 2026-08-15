@@ -6,8 +6,8 @@ from .flight_events_views import flight_events_list_create, flight_events_detail
 
 
 router = DefaultRouter()
-router.register(r"puertas_de_embarque", GateViewSet, basename="puertas_de_embarque")
-router.register(r"vuelos", FlightViewSet, basename="vuelos")
+router.register(r"gates", GateViewSet, basename="gates")
+router.register(r"flights", FlightViewSet, basename="flights")
 
 urlpatterns = [
     path("airlines/", airlines_list_create),

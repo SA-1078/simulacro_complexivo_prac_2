@@ -11,7 +11,7 @@ class GateViewSet(viewsets.ModelViewSet):
     serializer_class = GatesSerializer
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    search_fields = ["nombre"]
+    search_fields = ["code"]
     ordering_fields = ["id", "code", "terminal", "is_available"]
 
 class FlightViewSet(viewsets.ModelViewSet):
@@ -20,7 +20,7 @@ class FlightViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ["gate_id"]
-    search_fields = ["gate_id", "flight_number", "destination", "status", "departure_time", "created_at"]
+    search_fields = ["flight_number", "destination", "status", "departure_time", "created_at"]
     ordering_fields = ["id", "gate_id", "flight_number", "destination", "status", "created_at"]
 
     def get_queryset(self):

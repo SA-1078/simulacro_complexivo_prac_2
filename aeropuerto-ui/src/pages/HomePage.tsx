@@ -14,7 +14,9 @@ export default function HomePage() {
           SPA React + TypeScript + MUI + Router. Consume la API del examen (DRF paginado).
         </Typography>
 
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: "text.secondary"
+        }}>
           Flujo: Lista (público) → Login → Admin (Panel) → CRUD Marcas / Vehículos.
         </Typography>
       </Paper>

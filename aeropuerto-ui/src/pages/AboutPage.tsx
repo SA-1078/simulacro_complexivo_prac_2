@@ -17,7 +17,9 @@ export default function AboutPage() {
           <ListItem><ListItemText primary="CRUD /api/airlines/ (admin, paginado en LIST)" /></ListItem>
         </List>
 
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{
+          color: "text.secondary"
+        }}>
           Base URL: VITE_API_BASE_URL.
         </Typography>
       </Paper>

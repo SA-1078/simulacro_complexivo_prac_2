@@ -7,7 +7,7 @@ class GatesSerializer(serializers.ModelSerializer):
         fields = ["id", "code", "terminal", "is_available", "created_at"]
 
 class FlightsSerializer(serializers.ModelSerializer):
-    flight_number = serializers.CharField(source="flight_number", read_only=True)
+    flight_number = serializers.CharField(source="flight_number")
 
     class Meta:
         model = Flights
