@@ -1,0 +1,983 @@
+0. Alcance
+Expo + TS React Navigation StyleSheet Login JWT CRUD Mongo mínimo 2 Selects (Picker)
+
+Login JWT contra backend: POST /api/auth/login/ (guarda accessToken en memoria global).
+Home con menú a pantallas CRUD + botón Salir (logout local).
+Mongo CRUD mínimo:
+service_types: list / create / delete
+vehicle_services: list / create / delete
+Vehicle Services (crear) requiere:
+1 select de vehicle_id mostrando placa y (si existe) dueño.
+1 select de service_type_id mostrando nombre.
+Input notes (opcional) y cost (opcional numérico).
+Fecha: NO se envía desde la app al crear; el backend coloca la fecha actual.
+TypeScript obligatorio: tipado estricto, nombres claros, evitar any.
+Importante (cambios backend): el backend DRF utiliza endpoints con slash final: /api/auth/login/, /api/service-types/, /api/vehicle-services/, /api/vehiculos/. En mobile se utilizan esos mismos.
+
+1. Node + Expo CLI (Windows / Ubuntu)
+Se requiere Node.js versión 22. Para instalar y administrar versiones de Node con NVM, revisa la página Útiles.
+
+Ubuntu 24.04 (si aplica)
+Copiar
+sudo apt update
+sudo apt -y install curl ca-certificates
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt -y install nodejs
+node -v
+npm -v
+Windows (PowerShell)
+Copiar
+node -v
+npm -v
+
+# Si NO tienes Node 22 instalado:
+# (Instala Node.js LTS desde el instalador oficial)
+# Luego verifica:
+node -v
+npm -v
+2. Crear proyecto + dependencias (Windows / Ubuntu)
+Ubuntu (Terminal)
+Copiar
+npx create-expo-app@latest vehiculos-rn --template
+cd vehiculos-rn
+npm install
+Windows (PowerShell)
+Copiar
+npx create-expo-app@latest vehiculos-rn --template
+cd vehiculos-rn
+npm install
+Instalar librerías obligatorias
+Copiar
+npm i axios
+
+npx expo install react-native-screens react-native-safe-area-context
+npm i @react-navigation/native @react-navigation/native-stack
+
+# Selects en RN:
+npx expo install @react-native-picker/picker
+3. Ejecutar Expo (Windows / Ubuntu)
+Copiar
+npm run start
+Si pegaste código y no se refleja, limpia caché: npx expo start -c
+
+4. Base URL (según dónde corra el backend)
+Android Emulator: http://10.0.2.2:8000
+Dispositivo físico: http://IP_DE_TU_PC:8000 (misma red WiFi)
+No pongas slash final en baseURL (las rutas ya lo traen).
+src/config.ts
+Copiar
+export const API_BASE_URL = "http://10.0.2.2:8000";
+5. Estructura mínima
+Copiar
+src/
+  api/
+    http.ts
+    auth.api.ts
+    vehiculos.api.ts
+    serviceTypes.api.ts
+    vehicleServices.api.ts
+  screens/
+    LoginScreen.tsx
+    HomeScreen.tsx
+    ServiceTypesScreen.tsx
+    VehicleServicesScreen.tsx
+  types/
+    auth.ts
+    drf.ts
+    vehiculo.ts
+    serviceType.ts
+    vehicleService.ts
+App.tsx
+6. Tipos (DRF paginado y utilidades)
+src/types/drf.ts
+Copiar
+export type Paginated<T> = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+};
+
+export function toArray<T>(data: Paginated<T> | T[]): T[] {
+  // Soporta backend que responde paginado (DRF) o directo (array)
+  return Array.isArray(data) ? data : data.results;
+}
+src/types/auth.ts
+Copiar
+export type TokenPair = {
+  access: string;
+  refresh: string;
+};
+src/types/vehiculo.ts
+Tu backend en web devuelve vehículos como: { id, marca, marca_nombre, modelo, anio, placa, color, creado_en }. Para el select pedimos "placa".
+
+Copiar
+export type Vehiculo = {
+  id: number;
+  placa: string;
+  modelo?: string;
+  anio?: number;
+  color?: string;
+};
+src/types/serviceType.ts
+Copiar
+export type ServiceType = {
+  id: string;
+  name: string;
+  description?: string;
+  base_price?: number;
+  is_active?: boolean;
+};
+src/types/vehicleService.ts
+Copiar
+export type VehicleService = {
+  id: string;
+  vehiculo_id: number;       // Postgres
+  service_type_id: string;   // Mongo
+  date?: string;             // backend asigna fecha al crear (NO se envía desde app)
+  notes?: string;
+  cost?: number;
+};
+src/types/navigation.ts
+Se define aparte (y no dentro de App.tsx) para que las pantallas puedan importar RootStackParamList sin depender de que App.tsx ya exista al ir copiando los archivos en orden.
+
+Copiar
+export type RootStackParamList = {
+  Login: undefined;
+  Home: undefined;
+  ServiceTypes: undefined;
+  VehicleServices: undefined;
+};
+7. HTTP (axios + interceptor JWT)
+src/api/http.ts
+Copiar
+import axios from "axios";
+import { API_BASE_URL } from "../config";
+
+type GlobalAuthStore = { accessToken?: string };
+
+export const http = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 15000,
+});
+
+http.interceptors.request.use((config) => {
+  const store = globalThis as unknown as GlobalAuthStore;
+  const token = store.accessToken;
+
+  config.headers = config.headers ?? {};
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+});
+En este examen guardamos el token en globalThis.accessToken para simplificar. (En producción se usaría AsyncStorage).
+
+8. APIs (según backend DRF)
+8.1 Auth — src/api/auth.api.ts
+Copiar
+import { http } from "./http";
+import type { TokenPair } from "../types/auth";
+
+export async function loginApi(username: string, password: string): Promise<TokenPair> {
+  const { data } = await http.post<TokenPair>("/api/auth/login/", { username, password });
+  return data;
+}
+8.2 Vehículos (Postgres) — src/api/vehiculos.api.ts
+Se usa GET /api/vehiculos/ (DRF paginado).
+
+Copiar
+import { http } from "./http";
+import type { Paginated } from "../types/drf";
+import type { Vehiculo } from "../types/vehiculo";
+
+export async function listVehiculosApi(): Promise<Paginated<Vehiculo> | Vehiculo[]> {
+  const { data } = await http.get<Paginated<Vehiculo> | Vehiculo[]>("/api/vehiculos/");
+  return data;
+}
+8.3 Service Types (Mongo) — src/api/serviceTypes.api.ts
+Copiar
+import { http } from "./http";
+import type { ServiceType } from "../types/serviceType";
+import type { Paginated } from "../types/drf";
+
+export type ServiceTypeCreatePayload = {
+  name: string;
+  description?: string;
+};
+
+export async function listServiceTypesApi(): Promise<Paginated<ServiceType> | ServiceType[]> {
+  const { data } = await http.get<Paginated<ServiceType> | ServiceType[]>("/api/service-types/");
+  return data;
+}
+
+export async function createServiceTypeApi(payload: ServiceTypeCreatePayload): Promise<ServiceType> {
+  const { data } = await http.post<ServiceType>("/api/service-types/", payload);
+  return data;
+}
+
+export async function deleteServiceTypeApi(id: string): Promise<void> {
+  await http.delete(`/api/service-types/${id}/`);
+}
+8.4 Vehicle Services (Mongo) — src/api/vehicleServices.api.ts
+Al crear NO se envía date. Enviamos vehiculo_id, service_type_id, notes, cost.
+
+Copiar
+import { http } from "./http";
+import type { VehicleService } from "../types/vehicleService";
+import type { Paginated } from "../types/drf";
+
+export type VehicleServiceCreatePayload = {
+  vehiculo_id: number;
+  service_type_id: string;
+  notes?: string;
+  cost?: number;
+};
+
+export async function listVehicleServicesApi(): Promise<Paginated<VehicleService> | VehicleService[]> {
+  const { data } = await http.get<Paginated<VehicleService> | VehicleService[]>("/api/vehicle-services/");
+  return data;
+}
+
+export async function createVehicleServiceApi(payload: VehicleServiceCreatePayload): Promise<VehicleService> {
+  const { data } = await http.post<VehicleService>("/api/vehicle-services/", payload);
+  return data;
+}
+
+export async function deleteVehicleServiceApi(id: string): Promise<void> {
+  await http.delete(`/api/vehicle-services/${id}/`);
+}
+9. Screens completos (copiar y pegar)
+9.1 LoginScreen — src/screens/LoginScreen.tsx
+Copiar
+import { useState } from "react";
+import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+
+import { loginApi } from "../api/auth.api";
+import type { RootStackParamList } from "../types/navigation";
+
+type Nav = NativeStackNavigationProp<RootStackParamList, "Login">;
+
+type GlobalAuthStore = { accessToken?: string; refreshToken?: string };
+
+export default function LoginScreen() {
+  const navigation = useNavigation<Nav>();
+
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("admin");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const doLogin = async (): Promise<void> => {
+    try {
+      setErrorMessage("");
+
+      const tokenPair = await loginApi(username.trim(), password);
+
+      const store = globalThis as unknown as GlobalAuthStore;
+      store.accessToken = tokenPair.access;
+      store.refreshToken = tokenPair.refresh;
+
+      navigation.replace("Home");
+    } catch {
+      setErrorMessage("Login falló. Revisa credenciales / backend / baseURL.");
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Login (JWT)</Text>
+      {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+
+      <Text style={styles.label}>Usuario</Text>
+      <TextInput
+        value={username}
+        onChangeText={setUsername}
+        placeholder="admin"
+        placeholderTextColor="#8b949e"
+        style={styles.input}
+        autoCapitalize="none"
+      />
+
+      <Text style={styles.label}>Password</Text>
+      <TextInput
+        value={password}
+        onChangeText={setPassword}
+        placeholder="admin"
+        placeholderTextColor="#8b949e"
+        style={styles.input}
+        secureTextEntry
+      />
+
+      <Pressable onPress={doLogin} style={styles.btn}>
+        <Text style={styles.btnText}>Ingresar</Text>
+      </Pressable>
+
+      <Text style={styles.note}>
+        Se guarda accessToken en memoria global (para el interceptor axios).
+      </Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#0d1117", padding: 16, justifyContent: "center" },
+  title: { color: "#58a6ff", fontSize: 24, fontWeight: "800", marginBottom: 12 },
+  error: { color: "#ff7b72", marginBottom: 10 },
+  label: { color: "#8b949e", marginBottom: 6, marginTop: 8 },
+  input: {
+    backgroundColor: "#161b22",
+    color: "#c9d1d9",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#30363d",
+  },
+  btn: {
+    marginTop: 14,
+    backgroundColor: "#21262d",
+    borderColor: "#58a6ff",
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: 8,
+  },
+  btnText: { color: "#58a6ff", textAlign: "center", fontWeight: "700" },
+  note: { color: "#8b949e", marginTop: 10, fontSize: 12 },
+});
+9.2 HomeScreen — src/screens/HomeScreen.tsx
+Copiar
+import { View, Text, Pressable, StyleSheet } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+
+import type { RootStackParamList } from "../types/navigation";
+
+type Nav = NativeStackNavigationProp<RootStackParamList, "Home">;
+
+type GlobalAuthStore = { accessToken?: string; refreshToken?: string };
+
+export default function HomeScreen() {
+  const navigation = useNavigation<Nav>();
+
+  const logout = (): void => {
+    const store = globalThis as unknown as GlobalAuthStore;
+    store.accessToken = undefined;
+    store.refreshToken = undefined;
+    navigation.replace("Login");
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Menú</Text>
+      <Text style={styles.sub}>CRUD Mongo mínimo + selects</Text>
+
+      <Pressable onPress={() => navigation.navigate("ServiceTypes")} style={styles.btn}>
+        <Text style={styles.btnText}>Service Types (list/create/delete)</Text>
+      </Pressable>
+
+      <Pressable onPress={() => navigation.navigate("VehicleServices")} style={styles.btn}>
+        <Text style={styles.btnText}>Vehicle Services (2 selects + create/delete)</Text>
+      </Pressable>
+
+      <Pressable onPress={logout} style={[styles.btn, styles.btnDanger]}>
+        <Text style={[styles.btnText, styles.btnDangerText]}>Salir (logout)</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#0d1117", padding: 16 },
+  title: { color: "#58a6ff", fontSize: 24, fontWeight: "800", marginBottom: 6, marginTop: 10 },
+  sub: { color: "#8b949e", marginBottom: 14 },
+  btn: {
+    backgroundColor: "#21262d",
+    borderColor: "#58a6ff",
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  btnText: { color: "#58a6ff", textAlign: "center", fontWeight: "700" },
+  btnDanger: { borderColor: "#ff7b72" },
+  btnDangerText: { color: "#ff7b72" },
+});
+9.3 ServiceTypesScreen — src/screens/ServiceTypesScreen.tsx
+Copiar
+import { useEffect, useState } from "react";
+import { View, Text, TextInput, Pressable, FlatList, StyleSheet } from "react-native";
+
+import { listServiceTypesApi, createServiceTypeApi, deleteServiceTypeApi } from "../api/serviceTypes.api";
+import type { ServiceType } from "../types/serviceType";
+import { toArray } from "../types/drf";
+
+function normalizeText(input: string): string {
+  return input.trim();
+}
+
+export default function ServiceTypesScreen() {
+  const [items, setItems] = useState<ServiceType[]>([]);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const load = async (): Promise<void> => {
+    try {
+      setErrorMessage("");
+      const data = await listServiceTypesApi();
+      setItems(toArray(data));
+    } catch {
+      setErrorMessage("No se pudo cargar service types. ¿Login? ¿Token?");
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const createItem = async (): Promise<void> => {
+    try {
+      setErrorMessage("");
+
+      const cleanName = normalizeText(name);
+      if (!cleanName) return setErrorMessage("Name es requerido");
+
+      const created = await createServiceTypeApi({
+        name: cleanName,
+        description: normalizeText(description) || undefined,
+      });
+
+      setItems((prev) => [created, ...prev]);
+      setName("");
+      setDescription("");
+    } catch {
+      setErrorMessage("No se pudo crear service type.");
+    }
+  };
+
+  const removeItem = async (id: string): Promise<void> => {
+    try {
+      setErrorMessage("");
+      await deleteServiceTypeApi(id);
+      setItems((prev) => prev.filter((it) => it.id !== id));
+    } catch {
+      setErrorMessage("No se pudo eliminar service type.");
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item.id}
+        style={styles.list}
+        ListHeaderComponent={
+          <View>
+            <Text style={styles.title}>Service Types</Text>
+            {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+
+            <Text style={styles.label}>Nombre</Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Cambio de aceite"
+              placeholderTextColor="#8b949e"
+              style={styles.input}
+            />
+
+            <Text style={styles.label}>Descripción (opcional)</Text>
+            <TextInput
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Aceite + filtro"
+              placeholderTextColor="#8b949e"
+              style={styles.input}
+            />
+
+            <Pressable onPress={createItem} style={styles.btn}>
+              <Text style={styles.btnText}>Crear</Text>
+            </Pressable>
+
+            <Pressable onPress={load} style={[styles.btn, { marginBottom: 12 }]}>
+              <Text style={styles.btnText}>Refrescar</Text>
+            </Pressable>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <View style={styles.row}>
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={styles.rowText} numberOfLines={1}>{item.name}</Text>
+              {!!item.description && <Text style={styles.rowSub} numberOfLines={1}>{item.description}</Text>}
+            </View>
+
+            <Pressable onPress={() => removeItem(item.id)}>
+              <Text style={styles.del}>Eliminar</Text>
+            </Pressable>
+          </View>
+        )}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#0d1117", padding: 16 },
+  title: { color: "#58a6ff", fontSize: 22, fontWeight: "800", marginBottom: 10 },
+  error: { color: "#ff7b72", marginBottom: 10 },
+  label: { color: "#8b949e", marginBottom: 6, marginTop: 6 },
+  input: {
+    backgroundColor: "#161b22",
+    color: "#c9d1d9",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#30363d",
+  },
+  btn: { backgroundColor: "#21262d", borderColor: "#58a6ff", borderWidth: 1, padding: 12, borderRadius: 8 },
+  btnText: { color: "#58a6ff", textAlign: "center", fontWeight: "700" },
+  list: { flex: 1 },
+  row: {
+    backgroundColor: "#161b22",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#30363d",
+  },
+  rowText: { color: "#c9d1d9", fontWeight: "800" },
+  rowSub: { color: "#8b949e", marginTop: 2 },
+  del: { color: "#ff7b72", fontWeight: "700" },
+});
+9.4 VehicleServicesScreen — src/screens/VehicleServicesScreen.tsx (2 selects + notes + cost, sin fecha)
+Copiar
+import { useEffect, useState } from "react";
+import { View, Text, TextInput, Pressable, FlatList, StyleSheet } from "react-native";
+import { Picker } from "@react-native-picker/picker";
+
+import { listVehiculosApi } from "../api/vehiculos.api";
+import { listServiceTypesApi } from "../api/serviceTypes.api";
+import { listVehicleServicesApi, createVehicleServiceApi, deleteVehicleServiceApi } from "../api/vehicleServices.api";
+
+import type { Vehiculo } from "../types/vehiculo";
+import type { ServiceType } from "../types/serviceType";
+import type { VehicleService } from "../types/vehicleService";
+import { toArray } from "../types/drf";
+
+
+function serviceTypeLabel(st: ServiceType): string {
+  return st.name;
+}
+
+function parseOptionalNumber(input: string): { value?: number; error?: string } {
+  const trimmed = input.trim();
+  if (!trimmed) return { value: undefined };
+  const parsed = Number(trimmed);
+  if (Number.isNaN(parsed)) return { error: "Cost debe ser numérico" };
+  return { value: parsed };
+}
+
+export default function VehicleServicesScreen() {
+  const [services, setServices] = useState<VehicleService[]>([]);
+  const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
+
+  const [selectedVehiculoId, setSelectedVehiculoId] = useState<number | null>(null);
+  const [selectedServiceTypeId, setSelectedServiceTypeId] = useState<string>("");
+
+  const [notes, setNotes] = useState("");
+  const [costInput, setCostInput] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const loadAll = async (): Promise<void> => {
+    try {
+      setErrorMessage("");
+
+      const [servicesData, vehiculosData, serviceTypesData] = await Promise.all([
+        listVehicleServicesApi(),
+        listVehiculosApi(),
+        listServiceTypesApi(),
+      ]);
+
+      const servicesList = toArray(servicesData);
+      const vehiculosList = toArray(vehiculosData);
+      const serviceTypesList = toArray(serviceTypesData);
+
+      setServices(servicesList);
+      setVehiculos(vehiculosList);
+      setServiceTypes(serviceTypesList);
+
+      if (selectedVehiculoId === null && vehiculosList.length) setSelectedVehiculoId(vehiculosList[0].id);
+      if (!selectedServiceTypeId && serviceTypesList.length) setSelectedServiceTypeId(serviceTypesList[0].id);
+    } catch {
+      setErrorMessage("No se pudo cargar info. ¿Token? ¿baseURL? ¿backend encendido?");
+    }
+  };
+
+  useEffect(() => { loadAll(); }, []);
+
+  const createService = async (): Promise<void> => {
+    try {
+      setErrorMessage("");
+
+      if (selectedVehiculoId === null) return setErrorMessage("Seleccione un vehículo");
+      if (!selectedServiceTypeId) return setErrorMessage("Seleccione un tipo de servicio");
+
+      const trimmedNotes = notes.trim() ? notes.trim() : undefined;
+      const { value: parsedCost, error } = parseOptionalNumber(costInput);
+      if (error) return setErrorMessage(error);
+
+      // NO enviar fecha, backend la toma actual
+      const created = await createVehicleServiceApi({
+        vehiculo_id: selectedVehiculoId,
+        service_type_id: selectedServiceTypeId,
+        notes: trimmedNotes,
+        cost: parsedCost,
+      });
+
+      setServices((prev) => [created, ...prev]);
+      setNotes("");
+      setCostInput("");
+    } catch {
+      setErrorMessage("No se pudo crear vehicle service");
+    }
+  };
+
+  const removeService = async (id: string): Promise<void> => {
+    try {
+      setErrorMessage("");
+      await deleteVehicleServiceApi(id);
+      setServices((prev) => prev.filter((s) => s.id !== id));
+    } catch {
+      setErrorMessage("No se pudo eliminar vehicle service");
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        data={services}
+        keyExtractor={(item) => item.id}
+        style={styles.list}
+        ListHeaderComponent={
+          <View>
+            <Text style={styles.title}>Vehicle Services</Text>
+            {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+
+            <Text style={styles.label}>Vehículo (placa — dueño si existe)</Text>
+            <View style={styles.pickerWrap}>
+              <Picker
+                selectedValue={selectedVehiculoId ?? ""}
+                onValueChange={(value) => setSelectedVehiculoId(Number(value))}
+                dropdownIconColor="#58a6ff"
+                style={styles.picker}
+              >
+                {vehiculos.map((v) => (
+                  <Picker.Item key={v.id} label={v.placa} value={v.id} />
+                ))}
+              </Picker>
+            </View>
+
+            <Text style={styles.label}>Tipo de servicio</Text>
+            <View style={styles.pickerWrap}>
+              <Picker
+                selectedValue={selectedServiceTypeId}
+                onValueChange={(value) => setSelectedServiceTypeId(String(value))}
+                dropdownIconColor="#58a6ff"
+                style={styles.picker}
+              >
+                {serviceTypes.map((st) => (
+                  <Picker.Item key={st.id} label={serviceTypeLabel(st)} value={st.id} />
+                ))}
+              </Picker>
+            </View>
+
+            <Text style={styles.label}>Notas (opcional)</Text>
+            <TextInput
+              placeholder="Notas"
+              placeholderTextColor="#8b949e"
+              value={notes}
+              onChangeText={setNotes}
+              style={styles.input}
+            />
+
+            <Text style={styles.label}>Costo (opcional)</Text>
+            <TextInput
+              placeholder="40"
+              placeholderTextColor="#8b949e"
+              value={costInput}
+              onChangeText={setCostInput}
+              keyboardType="numeric"
+              style={styles.input}
+            />
+
+            <Pressable onPress={createService} style={[styles.btn, { marginBottom: 12 }]}>
+              <Text style={styles.btnText}>Crear (sin enviar fecha)</Text>
+            </Pressable>
+
+            <Pressable onPress={loadAll} style={[styles.btn, { marginBottom: 12 }]}>
+              <Text style={styles.btnText}>Refrescar</Text>
+            </Pressable>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <View style={styles.row}>
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={styles.rowText} numberOfLines={1}>Vehículo ID: {item.vehiculo_id}</Text>
+              <Text style={styles.rowSub} numberOfLines={1}>Service Type ID: {item.service_type_id}</Text>
+              {item.cost !== undefined && <Text style={styles.rowSub} numberOfLines={1}>Costo: {item.cost}</Text>}
+              {!!item.notes && <Text style={styles.rowSub} numberOfLines={1}>Notas: {item.notes}</Text>}
+              {!!item.date && <Text style={styles.rowSub} numberOfLines={1}>Fecha: {item.date}</Text>}
+            </View>
+
+            <Pressable onPress={() => removeService(item.id)}>
+              <Text style={styles.del}>Eliminar</Text>
+            </Pressable>
+          </View>
+        )}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#0d1117", padding: 16 },
+  title: { color: "#58a6ff", fontSize: 22, fontWeight: "800", marginBottom: 10 },
+  error: { color: "#ff7b72", marginBottom: 10 },
+  label: { color: "#8b949e", marginBottom: 6, marginTop: 6 },
+
+  pickerWrap: {
+    backgroundColor: "#161b22",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#30363d",
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  picker: { color: "#c9d1d9" },
+
+  input: {
+    backgroundColor: "#161b22",
+    color: "#c9d1d9",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#30363d",
+  },
+
+  btn: { backgroundColor: "#21262d", borderColor: "#58a6ff", borderWidth: 1, padding: 12, borderRadius: 8 },
+  btnText: { color: "#58a6ff", textAlign: "center", fontWeight: "700" },
+  list: { flex: 1 },
+
+  row: {
+    backgroundColor: "#161b22",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#30363d",
+  },
+  rowText: { color: "#c9d1d9", fontWeight: "800" },
+  rowSub: { color: "#8b949e", marginTop: 2 },
+  del: { color: "#ff7b72", fontWeight: "800" },
+});
+10. App.tsx (Navigation completo)
+App.tsx
+Copiar
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+
+import LoginScreen from "./src/screens/LoginScreen";
+import HomeScreen from "./src/screens/HomeScreen";
+import ServiceTypesScreen from "./src/screens/ServiceTypesScreen";
+import VehicleServicesScreen from "./src/screens/VehicleServicesScreen";
+
+import type { RootStackParamList } from "./src/types/navigation";
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Login">
+        <Stack.Screen name="Login" component={LoginScreen} options={{ title: "Login" }} />
+        <Stack.Screen name="Home" component={HomeScreen} options={{ title: "Menú" }} />
+        <Stack.Screen name="ServiceTypes" component={ServiceTypesScreen} options={{ title: "Service Types" }} />
+        <Stack.Screen name="VehicleServices" component={VehicleServicesScreen} options={{ title: "Vehicle Services" }} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+11. Comandos Windows útiles (PowerShell)
+Copiar
+# Crear proyecto
+npx create-expo-app@latest vehiculos-rn --template
+cd vehiculos-rn
+npm install
+
+# Instalar dependencias
+npm i axios
+npx expo install react-native-screens react-native-safe-area-context
+npm i @react-navigation/native @react-navigation/native-stack
+npx expo install @react-native-picker/picker
+
+# Correr
+npm run start
+
+# Si algo no se refleja:
+npx expo start -c
+12. Flujo de prueba (rápido para calificación)
+Backend corriendo en :8000.
+En Android Emulator: API_BASE_URL = http://10.0.2.2:8000.
+Login → entra a Home.
+Service Types: crear 1 o 2.
+Vehicle Services: select de vehículo + select de tipo + crear (sin fecha).
+Eliminar un registro en cada pantalla.
+13. Extra — Componentes nativos (Switch + Radio + Checkbox)
+En este examen, además de los 2 selects (Picker), agrega al formulario de Vehicle Services al menos 2 componentes nativos adicionales:
+
+Switch (tipo check)
+Radio (tipo option) usando Pressable
+Checkbox “custom” usando Pressable (RN no trae checkbox nativo)
+Estos campos pueden enviarse al backend si el API los soporta, o mantenerse solo local (pero deben verse en UI y afectar el resultado del registro).
+
+13.1 UI Components — src/components/RadioGroup.tsx
+Copiar
+import { View, Text, Pressable, StyleSheet } from "react-native";
+
+export type RadioOption<T extends string> = { label: string; value: T };
+
+type Props<T extends string> = {
+  label?: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: RadioOption<T>[];
+};
+
+export default function RadioGroup<T extends string>({ label, value, onChange, options }: Props<T>) {
+  return (
+    <View style={styles.wrap}>
+      {!!label && <Text style={styles.label}>{label}</Text>}
+      {options.map((opt) => {
+        const selected = opt.value === value;
+        return (
+          <Pressable key={opt.value} onPress={() => onChange(opt.value)} style={styles.row}>
+            <View style={[styles.outer, selected && styles.outerSelected]}>
+              {selected && <View style={styles.inner} />}
+            </View>
+            <Text style={styles.text}>{opt.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { marginBottom: 10 },
+  label: { color: "#8b949e", marginBottom: 6, marginTop: 6 },
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 8 },
+  outer: {
+    width: 22, height: 22, borderRadius: 999,
+    borderWidth: 2, borderColor: "#30363d",
+    justifyContent: "center", alignItems: "center",
+    marginRight: 10, backgroundColor: "#161b22",
+  },
+  outerSelected: { borderColor: "#58a6ff" },
+  inner: { width: 10, height: 10, borderRadius: 999, backgroundColor: "#58a6ff" },
+  text: { color: "#c9d1d9", fontWeight: "700" },
+});
+13.2 UI Components — src/components/CheckboxRow.tsx
+Copiar
+import { View, Text, Pressable, StyleSheet } from "react-native";
+
+type Props = {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+};
+
+export default function CheckboxRow({ label, checked, onChange }: Props) {
+  return (
+    <Pressable onPress={() => onChange(!checked)} style={styles.row}>
+      <View style={[styles.box, checked && styles.boxChecked]}>
+        {checked && <Text style={styles.tick}>✓</Text>}
+      </View>
+      <Text style={styles.text}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 8, marginBottom: 8 },
+  box: {
+    width: 22, height: 22, borderRadius: 6,
+    borderWidth: 2, borderColor: "#30363d",
+    backgroundColor: "#161b22",
+    alignItems: "center", justifyContent: "center",
+    marginRight: 10,
+  },
+  boxChecked: { borderColor: "#58a6ff" },
+  tick: { color: "#58a6ff", fontWeight: "900" },
+  text: { color: "#c9d1d9", fontWeight: "700" },
+});
+13.3 Uso en VehicleServicesScreen (Switch + Radio + Checkbox)
+Agrega estos estados y componentes en VehicleServicesScreen.tsx. Ejemplo: prioridad, pago inmediato, y si incluye revisión general.
+
+Copiar
+// ✅ arriba de los imports de VehicleServicesScreen:
+import { Switch } from "react-native";
+import RadioGroup from "../components/RadioGroup";
+import CheckboxRow from "../components/CheckboxRow";
+
+// ✅ dentro del componente VehicleServicesScreen (states):
+type Priority = "normal" | "urgente";
+
+const [payNow, setPayNow] = useState<boolean>(false);     // Switch (check)
+const [priority, setPriority] = useState<Priority>("normal"); // Radio (option)
+const [includeInspection, setIncludeInspection] = useState<boolean>(false); // Checkbox (custom)
+
+// ✅ en el JSX, por ejemplo debajo del costo:
+<Text style={styles.label}>Pago inmediato (Switch)</Text>
+<View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+  <Text style={{ color: "#c9d1d9" }}>{payNow ? "Sí" : "No"}</Text>
+  <Switch value={payNow} onValueChange={setPayNow} />
+</View>
+
+<RadioGroup<Priority>
+  label="Prioridad (Radio options)"
+  value={priority}
+  onChange={setPriority}
+  options={[
+    { label: "Normal", value: "normal" },
+    { label: "Urgente", value: "urgente" },
+  ]}
+/>
+
+<CheckboxRow
+  label="Incluye inspección general (Checkbox)"
+  checked={includeInspection}
+  onChange={setIncludeInspection}
+/>
+
+// ✅ Al crear, se pueden adjuntar estos campos si el backend lo soporta,
+// o simplemente mostrarlos en UI. Si el backend NO los soporta, no enviarlos.
+const created = await createVehicleServiceApi({
+  vehiculo_id: selectedVehiculoId,
+  service_type_id: selectedServiceTypeId,
+  notes: trimmedNotes,
+  cost: parsedCost,
+  // opcionales (solo si backend los acepta):
+  // pay_now: payNow,
+  // priority,
+  // include_inspection: includeInspection,
+});
+Si el backend aún no tiene esos campos, queda perfecto igual para el examen: el alumno debe demostrar UI + estado + validación simple.

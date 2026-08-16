@@ -1,5 +1,28 @@
+# Node / Frontend
 node_modules/
 dist/
+build/
+.expo/
+web-build/
+*.tsbuildinfo
+
+# Python / Backend
 venv/
+.venv/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.sqlite3
+aeropuerto_api/venv/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS / Logs
+.DS_Store
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*

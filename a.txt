@@ -1,126 +1,165 @@
-Sistema Básico de Control de
-Vuelos y Operaciones para un Aeropuerto
+================================================================================
+SECCIÓN 6: SISTEMAS OPERATIVOS (UBUNTU 24.04 EN VM)
+GUÍA DE COMANDOS Y PASOS PASO A PASO PARA LAS CAPTURAS 26 A 30
+================================================================================
+
+--------------------------------------------------------------------------------
+1. CREAR ESTRUCTURA DEL PROYECTO (Captura 26)
+--------------------------------------------------------------------------------
+# Crear la carpeta 'examen', dentro 'aeropuerto', y dentro las subcarpetas: backend, frontend, movil, docs
+mkdir -p ~/examen/aeropuerto/{backend,frontend,movil,docs}
+
+# Verificar la estructura generada con el comando tree:
+cd ~/examen
+tree aeropuerto/
+
+# Salida esperada en terminal:
+# aeropuerto/
+# ├── backend
+# ├── docs
+# ├── frontend
+# └── movil
+# 4 directories, 0 files
 
 
+--------------------------------------------------------------------------------
+2. NAVEGACIÓN Y VERIFICACIÓN (Captura 27)
+--------------------------------------------------------------------------------
+# Entrar a la carpeta aeropuerto:
+cd ~/examen/aeropuerto
 
+# Verificar la ruta actual de trabajo:
+pwd
+# Salida: /home/tu_usuario/examen/aeropuerto
 
-CASO AEROPUERTO: Sistema Básico de Control de Vuelos y Operaciones para un
-Aeropuerto
-Regla de negocio: gestionar puertas de embarque y vuelos con estados (SCHEDULED, BOARDING, DEPARTED,
-DELAYED, CANCELLED) y registrar operación (aerolíneas y eventos) en NoSQL.
-
-
-
-
-MODELO DE DATOS (2 tablas + 2 colecciones)
-
-Tablas PostgreSQL (2):
-
-Tabla gates (puertas de embarque):
-
-id BIGSERIAL PK
-code VARCHAR(10) NOT NULL UNIQUE
-terminal VARCHAR(20) NOT NULL
-is_available BOOLEAN NOT NULL DEFAULT TRUE
-created_at TIMESTAMP NOT NULL DEFAULT NOW()
-
-
-Tabla flights (vuelos):
-
-id BIGSERIAL PK
-gate_id BIGINT NOT NULL REFERENCES gates(id)
-flight_number VARCHAR(20) NOT NULL (ej: "AA1234")
-destination VARCHAR(100) NOT NULL
-status VARCHAR(20) NOT NULL (SCHEDULED|BOARDING|DEPARTED|DELAYED|CANCELLED)
-departure_time TIMESTAMP NOT NULL
-created_at TIMESTAMP NOT NULL DEFAULT NOW()
-
-
-//////////////////////////////
-SELECT f.status, f.id, g.code, g.is_available
-FROM aeropuerto_flights AS f
-INNER JOIN aeropuerto_gates AS g ON f.id = g.id
-WHERE f.status = 'SCHEDULED';
-
-
-CREATE OR REPLACE VIEW vw_active_orders AS
-SELECT f.status, f.id, g.code, g.is_available
-FROM aeropuerto_flights AS f
-INNER JOIN eropuerto_gates AS g ON f.id = g.id
-WHERE f.status = 'SCHEDULED';
-
-
-
-CREATE OR REPLACE TRIGGER trg_validar_flight_number
-BEFORE INSERT ON flights
-FOR EACH ROW
-EXECUTE FUNCTION fn_validar_flight_number();
-
-Colecciones MongoDB (2):
-
-Colección airlines (aerolíneas registradas):
-_id ObjectId
-name string
-code string (ej: "AA")
-country string
-is_active bool
-created_at date
-
-
-Colección flight_events (eventos operativos):
-_id ObjectId
-flight_id long (id SQL)
-event_type string (CREATED|BOARDING_STARTED|DEPARTED|DELAYED|CANCELLED)
-source string (WEB|MOBILE|SYSTEM)
-note string (texto simple, sin objeto)
-created_at date
-
-
-Nota de integración: flight_events.flight_id debe guardar el id del vuelo creado en PostgreSQL para vincular
-operación con el vuelo.
-
-
-
-
-PARTE DE SO
-
-mkdir example_dir
-tree
-mkdir example_dir
-cd example_dir
-nano ej.txt
-ls
+# Listar el contenido detallado incluyendo archivos ocultos:
 ls -la
-echo "Hola mundo" > ej.txt
-cat ej.txt
-echo "Segunda línea" >> ej.txt
-cat ej.txt
-grep "Hola" ej.txt
-grep "Segunda" ej.txt
-mkdir carpeta
-chmod 1777 carpeta
-ls -ld carpeta
 
 
+--------------------------------------------------------------------------------
+3. CREAR ARCHIVOS DE EVIDENCIA
+--------------------------------------------------------------------------------
+# Entrar a la carpeta docs y crear los archivos comandos.txt y evidencia.txt:
+cd ~/examen/aeropuerto/docs
+touch comandos.txt evidencia.txt
 
-alumnos@administrator-NUC8i7BEH:~/Documents/simulacro_complexivo_prac_2$ git add .
-error: 'aeropuerto-rn/' does not have a commit checked out
-fatal: adding files failed
-alumnos@administrator-NUC8i7BEH:~/Documents/simulacro_complexivo_prac_2$ git commit -m "Añadiendo MOVIL"
-On branch main
-Your branch is up to date with 'origin/main'.
+# Registrar la fecha y hora del sistema dentro de evidencia.txt:
+date >> evidencia.txt
 
-Changes not staged for commit:
-  (use "git add <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard changes in working directory)
-        modified:   a.txt
+# Verificar el contenido de evidencia.txt:
+cat evidencia.txt
 
-Untracked files:
-  (use "git add <file>..." to include in what will be committed)
-        aeropuerto-rn/
-        example_dir/
 
-no changes added to commit (use "git add" and/or "git commit -a")
-alumnos@administrator-NUC8i7BEH:~/Documents/simulacro_complexivo_prac_2$ git push origin main
-Everything up-to-date
-alumnos@administrator-NUC8i7BEH:~/Documents/simulacro_complexivo_prac_2$ 
+--------------------------------------------------------------------------------
+4. REDIRECCIÓN DE SALIDA (Captura 28)
+--------------------------------------------------------------------------------
+# Guardar la salida del comando who en un archivo (redirección simple con >):
+who > salida_sistema.txt
+
+# Agregar la salida del comando ls -la al mismo archivo (redirección de anexado con >>):
+ls -la >> salida_sistema.txt
+
+# Verificar el contenido final del archivo:
+cat salida_sistema.txt
+
+
+--------------------------------------------------------------------------------
+5. BUSCAR PALABRA DENTRO DE ARCHIVO (Captura 29)
+--------------------------------------------------------------------------------
+# Escribir el contenido requerido dentro del archivo comandos.txt:
+cat << 'EOF' > ~/examen/aeropuerto/docs/comandos.txt
+Proyecto Aeropuerto - Backend
+GET /api/flights/
+GET /api/flights/15/
+POST /api/flights/
+DELETE /api/flights/10/
+INFO: flight created successfully
+INFO: flights service running
+WARN: flight delay detected
+EOF
+
+# Mostrar el contenido completo del archivo:
+cat ~/examen/aeropuerto/docs/comandos.txt
+
+# Buscar la palabra 'flights' dentro de comandos.txt:
+grep "flights" ~/examen/aeropuerto/docs/comandos.txt
+
+# Buscar mostrando el número de línea (-n):
+grep -n "flights" ~/examen/aeropuerto/docs/comandos.txt
+
+# Buscar registros de tipo INFO o WARN:
+grep -n "INFO" ~/examen/aeropuerto/docs/comandos.txt
+grep -n "WARN" ~/examen/aeropuerto/docs/comandos.txt
+
+
+--------------------------------------------------------------------------------
+6. LOCALIZAR ARCHIVO
+--------------------------------------------------------------------------------
+# Crear un archivo README.md dentro de backend:
+touch ~/examen/aeropuerto/backend/README.md
+
+# Regresar a la carpeta aeropuerto y buscar el archivo README.md:
+cd ~/examen/aeropuerto
+find . -name "README.md"
+# Salida: ./backend/README.md
+
+
+--------------------------------------------------------------------------------
+7. COPIAR Y MOVER ARCHIVOS
+--------------------------------------------------------------------------------
+# Copiar evidencia.txt para crear un respaldo:
+cd ~/examen/aeropuerto/docs
+cp evidencia.txt evidencia_respaldo.txt
+
+# Mover el archivo de respaldo a la carpeta backend:
+mv evidencia_respaldo.txt ~/examen/aeropuerto/backend/
+
+# Verificar en docs y en backend que el archivo fue copiado y movido:
+ls -la ~/examen/aeropuerto/docs/
+ls -la ~/examen/aeropuerto/backend/
+
+
+--------------------------------------------------------------------------------
+8. PERMISOS Y STICKY BIT (Captura 30)
+--------------------------------------------------------------------------------
+# Ver los permisos actuales de la carpeta docs:
+cd ~/examen/aeropuerto
+ls -ld docs
+
+# Modificar permisos de docs (ejemplo: lectura, escritura y ejecución para usuario y grupo):
+chmod 775 docs
+ls -ld docs
+
+# Crear carpeta shared dentro de aeropuerto:
+mkdir shared
+
+# Aplicar el Sticky Bit (1777: todos pueden leer/escribir pero solo el dueño puede borrar sus archivos):
+chmod 1777 shared
+
+# Verificar los permisos y el Sticky Bit (debe mostrar 't' al final: drwxrwxrwt):
+ls -ld shared
+
+
+================================================================================
+RESUMEN RÁPIDO DE TODO PARA EJECUCIÓN CONTINUA EN TERMINAL (COPIAR Y PEGAR):
+================================================================================
+mkdir -p ~/examen/aeropuerto/{backend,frontend,movil,docs}
+cd ~/examen && tree aeropuerto/
+cd ~/examen/aeropuerto && pwd && ls -la
+cd docs && touch comandos.txt evidencia.txt && date >> evidencia.txt && cat evidencia.txt
+who > salida_sistema.txt && ls -la >> salida_sistema.txt && cat salida_sistema.txt
+cat << 'EOF' > comandos.txt
+Proyecto Aeropuerto - Backend
+GET /api/flights/
+GET /api/flights/15/
+POST /api/flights/
+DELETE /api/flights/10/
+INFO: flight created successfully
+INFO: flights service running
+WARN: flight delay detected
+EOF
+grep -n "flights" comandos.txt
+touch ~/examen/aeropuerto/backend/README.md
+cd ~/examen/aeropuerto && find . -name "README.md"
+cd docs && cp evidencia.txt evidencia_respaldo.txt && mv evidencia_respaldo.txt ~/examen/aeropuerto/backend/
+cd ~/examen/aeropuerto && ls -ld docs && chmod 775 docs && mkdir shared && chmod 1777 shared && ls -ld shared
