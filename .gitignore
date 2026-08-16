@@ -16,7 +16,6 @@ __pycache__/
 aeropuerto_api/venv/
 
 # Environment variables
-.env
 .env.local
 .env.*.local
 
