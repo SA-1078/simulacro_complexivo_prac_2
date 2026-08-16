@@ -163,3 +163,20 @@ touch ~/examen/aeropuerto/backend/README.md
 cd ~/examen/aeropuerto && find . -name "README.md"
 cd docs && cp evidencia.txt evidencia_respaldo.txt && mv evidencia_respaldo.txt ~/examen/aeropuerto/backend/
 cd ~/examen/aeropuerto && ls -ld docs && chmod 775 docs && mkdir shared && chmod 1777 shared && ls -ld shared
+
+
+
+
+
+QUITAR LA CARPETA MOVIL PARA SUBIRLA A GITHUB
+# 1. Quitar aeropuerto-rn del índice de git principal
+git rm --cached -f -r aeropuerto-rn
+
+# 2. Eliminar la carpeta .git interna de aeropuerto-rn
+rm -rf aeropuerto-rn/.git
+
+# 3. Volver a agregar todo al repositorio principal
+git add .
+
+# 4. Verificar el estado
+git status
