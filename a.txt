@@ -165,11 +165,18 @@ cd docs && cp evidencia.txt evidencia_respaldo.txt && mv evidencia_respaldo.txt 
 cd ~/examen/aeropuerto && ls -ld docs && chmod 775 docs && mkdir shared && chmod 1777 shared && ls -ld shared
 
 
+================================================================================
+QUITAR LA CARPETA MOVIL PARA SUBIRLA A GITHUB (DESVINCULAR REPOSITORIO EMBEBIDO)
+================================================================================
 
-
+Configurar git en el proyecto local para poder subir todos los cambios a GitHub.
+Comando: git config user.name "User"
+Comando: git config user.email "email"
+Comando: git remote add origin "url"
+Comando: git push -u origin main
 
 QUITAR LA CARPETA MOVIL PARA SUBIRLA A GITHUB
-# 1. Quitar aeropuerto-rn del índice de git principal
+# 1. Quitar la carpeta móvil del índice de git principal (ej: aeropuerto-rn):
 git rm --cached -f -r aeropuerto-rn
 
 # 2. Eliminar la carpeta .git interna de aeropuerto-rn
